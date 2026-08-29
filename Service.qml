@@ -1,0 +1,187 @@
+import QtQuick
+import QtQuick.Effects
+import Quickshell
+import Quickshell.Hyprland
+import Quickshell.Io
+import Quickshell.Wayland
+import qs.Commons
+
+Item {
+  id: root
+
+  property string state: "idle"
+  property int animationFrame: 0
+
+  readonly property bool active: state === "recording" || state === "transcribing"
+  readonly property color stateColor: state === "recording" ? Color.urgent : Color.accent
+  readonly property string label: state === "recording" ? "LISTENING" : "TRANSCRIBING"
+  readonly property string focusedScreenName: Hyprland.focusedMonitor
+    ? String(Hyprland.focusedMonitor.name || "") : ""
+  readonly property var activeScreen: {
+    for (var i = 0; i < Quickshell.screens.length; i++) {
+      if (Quickshell.screens[i].name === focusedScreenName) return Quickshell.screens[i]
+    }
+    return Quickshell.screens.length ? Quickshell.screens[0] : null
+  }
+
+  function update(raw) {
+    try {
+      var data = JSON.parse(String(raw || "{}"))
+      var nextState = String(data.alt || data.class || "idle")
+      state = nextState === "recording" || nextState === "transcribing" ? nextState : "idle"
+    } catch (error) {
+      state = "idle"
+    }
+  }
+
+  function barHeight(index) {
+    if (state === "recording") {
+      var firstWave = Math.sin((animationFrame + index * 2.3) * 0.44)
+      var secondWave = Math.sin((animationFrame * 0.27) - index * 1.7)
+      return 5 + Math.abs(firstWave + secondWave * 0.45) * 16
+    }
+
+    var distance = Math.abs(index - (animationFrame % 15))
+    distance = Math.min(distance, 15 - distance)
+    return 5 + Math.max(0, 16 - distance * 5)
+  }
+
+  Process {
+    id: statusProcess
+
+    command: ["omarchy-voxtype-status"]
+    running: true
+    stdout: SplitParser {
+      onRead: function(data) { root.update(data) }
+    }
+    onExited: function() {
+      root.state = "idle"
+      statusRetry.restart()
+    }
+  }
+
+  Timer {
+    id: statusRetry
+
+    interval: 1000
+    onTriggered: statusProcess.running = true
+  }
+
+  Timer {
+    interval: root.state === "recording" ? 90 : 130
+    repeat: true
+    running: root.active
+    onTriggered: root.animationFrame = (root.animationFrame + 1) % 120
+  }
+
+  PanelWindow {
+    id: surface
+
+    screen: root.activeScreen
+    visible: root.active && root.activeScreen !== null
+    implicitWidth: 320
+    implicitHeight: 76
+    anchors.top: true
+    margins.top: Style.gapsOut
+    color: "transparent"
+    exclusionMode: ExclusionMode.Ignore
+    mask: Region {}
+    WlrLayershell.namespace: "voxtype-aura"
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+    Rectangle {
+      id: glowSource
+
+      visible: false
+      width: 292
+      height: 50
+      anchors.centerIn: parent
+      radius: Math.min(height / 2, Style.cornerRadius)
+      color: root.stateColor
+    }
+
+    MultiEffect {
+      anchors.fill: glowSource
+      source: glowSource
+      autoPaddingEnabled: true
+      blurEnabled: true
+      blur: 0.9
+      blurMax: 18
+      blurMultiplier: 1
+      opacity: 0.42
+      scale: 1.02
+    }
+
+    Rectangle {
+      width: 292
+      height: 50
+      anchors.centerIn: parent
+      radius: Math.min(height / 2, Style.cornerRadius)
+      color: Util.alpha(Color.background, 0.94)
+      border.width: 1
+      border.color: root.stateColor
+
+      Row {
+        anchors.fill: parent
+        anchors.leftMargin: 18
+        anchors.rightMargin: 18
+        spacing: 18
+
+        Text {
+          width: 24
+          height: parent.height
+          verticalAlignment: Text.AlignVCenter
+          horizontalAlignment: Text.AlignHCenter
+          text: "\uf130"
+          color: root.stateColor
+          font.family: Style.font.family
+          font.pixelSize: 20
+          renderType: Text.NativeRendering
+        }
+
+        Item {
+          width: 80
+          height: parent.height
+
+          Row {
+            anchors.centerIn: parent
+            spacing: 5
+
+            Repeater {
+              model: 8
+
+              Rectangle {
+                required property int index
+
+                width: 3
+                height: root.barHeight(index)
+                anchors.verticalCenter: parent.verticalCenter
+                radius: 1.5
+                color: root.stateColor
+
+                Behavior on height {
+                  NumberAnimation { duration: 85; easing.type: Easing.OutCubic }
+                }
+              }
+            }
+          }
+        }
+
+        Text {
+          width: 116
+          height: parent.height
+          verticalAlignment: Text.AlignVCenter
+          horizontalAlignment: Text.AlignRight
+          text: root.label
+          color: Color.foreground
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+          font.weight: Font.Medium
+          font.letterSpacing: 1.2
+          renderType: Text.NativeRendering
+        }
+      }
+    }
+  }
+}

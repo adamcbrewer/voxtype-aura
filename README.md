@@ -1,0 +1,69 @@
+# Voxtype Aura
+
+A compact, theme-aware [Voxtype](https://github.com/peteonrails/voxtype)
+dictation overlay for [Omarchy](https://omarchy.org/).
+
+Aura appears at the top-center of the focused monitor while Voxtype is active:
+
+- **LISTENING** with animated bars while recording.
+- **TRANSCRIBING** with a sweeping animation while processing speech.
+- Hidden when Voxtype is idle.
+
+It follows Omarchy's active colors, typography, spacing, and corner radius. The
+layer-shell surface never takes keyboard focus, accepts no pointer input, and
+does not reserve screen space.
+
+## Requirements
+
+- Omarchy with shell-plugin support.
+- Voxtype running as `voxtype.service`.
+- `omarchy-voxtype-status` available on `PATH`.
+
+## Install
+
+Disable Voxtype's built-in OSD in `~/.config/voxtype/config.toml`:
+
+```toml
+[osd]
+enabled = false
+```
+
+Restart Voxtype:
+
+```sh
+systemctl --user restart voxtype.service
+```
+
+Install and enable Aura:
+
+```sh
+omarchy plugin add https://github.com/adamcbrewer/voxtype-aura.git --enable
+```
+
+## Remove
+
+```sh
+omarchy plugin remove io.github.adamcbrewer.voxtype-aura
+```
+
+To restore Voxtype's built-in display, set `[osd] enabled = true` and restart
+`voxtype.service`.
+
+## How It Works
+
+Aura is a keep-loaded Omarchy service plugin. It follows Voxtype's status stream
+through `omarchy-voxtype-status` and maps only `recording` and `transcribing` to
+visible states. Unexpected or unavailable status data fails closed by hiding
+the overlay. If the status process exits, Aura retries it after one second.
+
+The animated bars are decorative and do not represent microphone levels.
+
+## Security
+
+Omarchy plugins run unsandboxed inside the long-lived `omarchy-shell` process.
+Review plugin code before enabling it. Aura runs one fixed local command,
+accepts no user input, performs no network requests, and reads no credentials.
+
+## License
+
+[MIT](LICENSE)
