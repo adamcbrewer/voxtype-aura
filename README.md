@@ -7,6 +7,7 @@ Aura appears at the top-center of the focused monitor while Voxtype is active:
 
 - **LISTENING** with animated bars while recording.
 - **TRANSCRIBING** with a sweeping animation while processing speech.
+- **TRANSCRIBED** with a brief check mark after successful transcription.
 - Hidden when Voxtype is idle.
 
 It follows Omarchy's active colors, typography, spacing, and corner radius. The
@@ -52,9 +53,10 @@ To restore Voxtype's built-in display, set `[osd] enabled = true` and restart
 ## How It Works
 
 Aura is a keep-loaded Omarchy service plugin. It follows Voxtype's status stream
-through `omarchy-voxtype-status` and maps only `recording` and `transcribing` to
-visible states. Unexpected or unavailable status data fails closed by hiding
-the overlay. If the status process exits, Aura retries it after one second.
+through `omarchy-voxtype-status`. A valid transition from `transcribing` to an
+inactive state briefly shows the completion state. Unexpected or unavailable
+status data fails closed by hiding the overlay. If the status process exits,
+Aura retries it after one second.
 
 The animated bars are decorative and do not represent microphone levels.
 

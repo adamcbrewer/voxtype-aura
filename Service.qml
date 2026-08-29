@@ -12,9 +12,12 @@ Item {
   property string state: "idle"
   property int animationFrame: 0
 
-  readonly property bool active: state === "recording" || state === "transcribing"
-  readonly property color stateColor: state === "recording" ? Color.urgent : Color.accent
-  readonly property string label: state === "recording" ? "LISTENING" : "TRANSCRIBING"
+  readonly property bool active: state === "recording" || state === "transcribing" || state === "success"
+  readonly property color successColor: Qt.hsla(0.33, Math.max(0.35, Color.accent.hslSaturation), Color.accent.hslLightness, 1)
+  readonly property color stateColor: state === "recording" ? Color.urgent
+    : state === "success" ? successColor : Color.accent
+  readonly property string label: state === "recording" ? "LISTENING"
+    : state === "success" ? "TRANSCRIBED" : "TRANSCRIBING"
   readonly property string focusedScreenName: Hyprland.focusedMonitor
     ? String(Hyprland.focusedMonitor.name || "") : ""
   readonly property var activeScreen: {
@@ -28,13 +31,21 @@ Item {
     try {
       var data = JSON.parse(String(raw || "{}"))
       var nextState = String(data.alt || data.class || "idle")
-      state = nextState === "recording" || nextState === "transcribing" ? nextState : "idle"
+      if (nextState === "recording" || nextState === "transcribing") {
+        state = nextState
+      } else if (state === "transcribing") {
+        state = "success"
+      } else if (state !== "success") {
+        state = "idle"
+      }
     } catch (error) {
       state = "idle"
     }
   }
 
   function barHeight(index) {
+    if (state === "success") return 5
+
     if (state === "recording") {
       var firstWave = Math.sin((animationFrame + index * 2.3) * 0.44)
       var secondWave = Math.sin((animationFrame * 0.27) - index * 1.7)
@@ -68,10 +79,16 @@ Item {
   }
 
   Timer {
-    interval: root.state === "recording" ? 90 : 130
+    interval: root.state === "recording" ? 90 : 80
     repeat: true
-    running: root.active
+    running: root.state === "recording" || root.state === "transcribing"
     onTriggered: root.animationFrame = (root.animationFrame + 1) % 120
+  }
+
+  Timer {
+    interval: 1300
+    running: root.state === "success"
+    onTriggered: root.state = "idle"
   }
 
   PanelWindow {
@@ -133,7 +150,7 @@ Item {
           height: parent.height
           verticalAlignment: Text.AlignVCenter
           horizontalAlignment: Text.AlignHCenter
-          text: "\uf130"
+          text: root.state === "success" ? "\uf00c" : "\uf130"
           color: root.stateColor
           font.family: Style.font.family
           font.pixelSize: 20
