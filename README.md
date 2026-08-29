@@ -14,6 +14,20 @@ It follows Omarchy's active colors, typography, spacing, and corner radius. The
 layer-shell surface never takes keyboard focus, accepts no pointer input, and
 does not reserve screen space.
 
+## Examples
+
+### Listening
+
+![Voxtype Aura listening while speech is recorded](preview.png)
+
+### Transcribing
+
+![Voxtype Aura transcribing recorded speech](docs/screenshots/transcribing.png)
+
+### Transcribed
+
+![Voxtype Aura showing a successful transcription](docs/screenshots/transcribed.png)
+
 ## Requirements
 
 - Omarchy with shell-plugin support.
