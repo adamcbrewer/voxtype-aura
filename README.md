@@ -58,6 +58,13 @@ the overlay. If the status process exits, Aura retries it after one second.
 
 The animated bars are decorative and do not represent microphone levels.
 
+## Credits
+
+Voxtype Aura was inspired by Jon Henshaw's
+[Voxtype Prism](https://github.com/jonhenshaw/voxtype-prism), particularly its
+compact, theme-aware recording indicators and Omarchy layer-shell integration.
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for license attribution.
+
 ## Security
 
 Omarchy plugins run unsandboxed inside the long-lived `omarchy-shell` process.
