@@ -11,6 +11,7 @@ Item {
 
   property string state: "idle"
   property int animationFrame: 0
+  property var audioSamples: []
 
   readonly property bool active: state === "recording" || state === "transcribing" || state === "success"
   readonly property color successColor: Qt.hsla(0.33, Math.max(0.35, Color.accent.hslSaturation), Color.accent.hslLightness, 1)
@@ -32,6 +33,8 @@ Item {
       var data = JSON.parse(String(raw || "{}"))
       var nextState = String(data.alt || data.class || "idle")
       if (nextState === "recording" || nextState === "transcribing") {
+        if (nextState === "recording" && state !== "recording") audioSamples = []
+        if (nextState === "transcribing" && state !== "transcribing") animationFrame = 0
         state = nextState
       } else if (state === "transcribing") {
         state = "success"
@@ -43,13 +46,26 @@ Item {
     }
   }
 
+  function updateAudio(raw) {
+    try {
+      var data = JSON.parse(String(raw || "{}"))
+      if (state !== "recording" || typeof data.peak !== "number") return
+
+      var next = audioSamples.slice()
+      next.push(Math.max(0, Math.min(1, data.peak)))
+      while (next.length > 40) next.shift()
+      audioSamples = next
+    } catch (error) {
+    }
+  }
+
   function barHeight(index) {
     if (state === "success") return 5
 
-    if (state === "recording") {
-      var firstWave = Math.sin((animationFrame + index * 2.3) * 0.44)
-      var secondWave = Math.sin((animationFrame * 0.27) - index * 1.7)
-      return 5 + Math.abs(firstWave + secondWave * 0.45) * 16
+    if (state === "recording" && audioSamples.length) {
+      var sampleIndex = Math.min(audioSamples.length - 1,
+        Math.floor(index * (audioSamples.length - 1) / 7))
+      return 5 + Math.min(1, audioSamples[sampleIndex] * 20) * 16
     }
 
     var distance = Math.abs(index - (animationFrame % 15))
@@ -71,6 +87,27 @@ Item {
     }
   }
 
+  Process {
+    id: audioBridge
+
+    command: ["voxtype-audio-bridge"]
+    running: true
+    stdout: SplitParser {
+      splitMarker: "\n"
+      onRead: function(data) { root.updateAudio(data) }
+    }
+    onExited: function() {
+      audioRetry.restart()
+    }
+  }
+
+  Timer {
+    id: audioRetry
+
+    interval: 1000
+    onTriggered: audioBridge.running = true
+  }
+
   Timer {
     id: statusRetry
 
@@ -79,9 +116,9 @@ Item {
   }
 
   Timer {
-    interval: root.state === "recording" ? 90 : 80
+    interval: 80
     repeat: true
-    running: root.state === "recording" || root.state === "transcribing"
+    running: root.state === "transcribing"
     onTriggered: root.animationFrame = (root.animationFrame + 1) % 120
   }
 
