@@ -6,6 +6,10 @@ dictation overlay for [Omarchy](https://omarchy.org/).
 Aura appears at the top-center of the focused monitor while Voxtype is active:
 
 - **LISTENING** with live microphone-level bars while recording.
+- **CHECKING MIC** while the actual capture route is being verified.
+- **MIC MUTED** with a crossed-out microphone when that input is muted.
+  The recording is cancelled without transcription; unmute and press the hotkey again.
+- **CHECK MIC** if the capture route cannot be verified within 1.5 seconds.
 - **TRANSCRIBING** with a sweeping animation while processing speech.
 - **TRANSCRIBED** with a brief check mark after successful transcription.
 - Hidden when Voxtype is idle.
@@ -34,6 +38,9 @@ does not reserve screen space.
 - Voxtype running as `voxtype.service`.
 - `omarchy-voxtype-status` available on `PATH`.
 - `voxtype-audio-bridge` available on `PATH`.
+- Quickshell's `Quickshell.Services.Pipewire` module and a PipeWire-visible
+  Voxtype capture stream.
+- Voxtype with support for `voxtype record cancel`.
 
 ## Install
 
@@ -74,6 +81,24 @@ inactive state briefly shows the completion state. Unexpected or unavailable
 status data fails closed by hiding the overlay. If either process exits while
 needed, Aura retries it after one second.
 
+### Microphone guard
+
+Before showing LISTENING, Aura resolves Voxtype's live capture stream and its
+connected source, rather than assuming the system default is the microphone in
+use. It checks both stream and source mute state every 50 ms during recording.
+A muted input cancels via `voxtype record cancel`, keeps the warning visible for
+3.5 seconds, and suppresses the normal transcription/success display. It never
+automatically unmutes a device. All existing Voxtype hotkeys remain unchanged.
+
+Mute detection requires a PipeWire-visible capture route. Hardware mute switches
+that do not report their state to PipeWire cannot be detected this way. Direct
+ALSA capture outside PipeWire is not supported by this guard and displays CHECK MIC.
+Quickshell's PipeWire service supplies the [node mute state](https://quickshell.org/docs/v0.3.0/types/Quickshell.Services.Pipewire/PwNodeAudio/).
+
+Run regression checks with `node tests/microphone.test.cjs`. Because this plugin
+uses `keepLoaded`, run `omarchy restart shell` after changing its code if a plugin
+rescan retains the previous instance.
+
 ## Credits
 
 Voxtype Aura was inspired by Jon Henshaw's
@@ -84,7 +109,8 @@ See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for license attribution.
 ## Security
 
 Omarchy plugins run unsandboxed inside the long-lived `omarchy-shell` process.
-Review plugin code before enabling it. Aura runs two fixed local commands,
+Review plugin code before enabling it. Aura runs fixed local status/audio commands
+and `voxtype record cancel` when input is muted or unavailable,
 accepts no user input, performs no network requests, and reads no credentials.
 
 ## License

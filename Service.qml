@@ -3,8 +3,10 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
+import Quickshell.Services.Pipewire
 import Quickshell.Wayland
 import qs.Commons
+import "Microphone.js" as Microphone
 
 Item {
   id: root
@@ -12,12 +14,24 @@ Item {
   property string state: "idle"
   property int animationFrame: 0
   property var audioSamples: []
+  property string daemonState: "idle"
+  property bool recordingBlocked: false
+  property bool recordingVerified: false
+  property double checkStarted: 0
+  readonly property bool warning: state === "muted" || state === "unavailable"
+  readonly property var captureNodes: {
+    var nodes = Pipewire.nodes ? Pipewire.nodes.values : []
+    return nodes.filter(function(node) { return node && node.audio && !node.isSink })
+  }
 
-  readonly property bool active: state === "recording" || state === "transcribing" || state === "success"
+  readonly property bool active: state === "recording" || state === "transcribing" || state === "success" || state === "checking" || warning
   readonly property color successColor: Qt.hsla(0.33, Math.max(0.35, Color.accent.hslSaturation), Color.accent.hslLightness, 1)
-  readonly property color stateColor: state === "recording" ? Color.urgent
+  readonly property color stateColor: state === "recording" || warning ? Color.urgent
     : state === "success" ? successColor : Color.accent
   readonly property string label: state === "recording" ? "LISTENING"
+    : state === "muted" ? "MIC MUTED"
+    : state === "unavailable" ? "CHECK MIC"
+    : state === "checking" ? "CHECKING MIC"
     : state === "success" ? "TRANSCRIBED" : "TRANSCRIBING"
   readonly property string focusedScreenName: Hyprland.focusedMonitor
     ? String(Hyprland.focusedMonitor.name || "") : ""
@@ -32,18 +46,85 @@ Item {
     try {
       var data = JSON.parse(String(raw || "{}"))
       var nextState = String(data.alt || data.class || "idle")
-      if (nextState === "recording" || nextState === "transcribing") {
-        if (nextState === "recording" && state !== "recording") audioSamples = []
-        if (nextState === "transcribing" && state !== "transcribing") animationFrame = 0
-        state = nextState
-      } else if (state === "transcribing") {
+      var previous = daemonState
+      daemonState = nextState
+      if (nextState === "recording") {
+        if (previous !== "recording") {
+          warningTimer.stop()
+          recordingBlocked = false
+          recordingVerified = false
+          audioSamples = []
+          checkStarted = Date.now()
+          state = "checking"
+        }
+        checkMicrophone()
+      } else if (recordingBlocked) {
+        // Cancellation and a queued key release must never show success.
+        if (nextState === "transcribing" && !cancelProcess.running) cancelProcess.running = true
+      } else if (nextState === "transcribing") {
+        // Voxtype can remove its capture stream before publishing the stop
+        // status. A previously verified recording may still be transcribed.
+        if (!recordingVerified) {
+          blockRecording("unavailable")
+          return
+        }
+        animationFrame = 0
+        state = "transcribing"
+      } else if (nextState === "idle" && state === "transcribing") {
         state = "success"
       } else if (state !== "success") {
         state = "idle"
       }
     } catch (error) {
+      daemonState = "idle"
       state = "idle"
     }
+  }
+
+  function blockRecording(reason) {
+    if (recordingBlocked) return
+    recordingBlocked = true
+    state = reason
+    audioSamples = []
+    cancelProcess.running = true
+    warningTimer.restart()
+  }
+
+  function checkMicrophone() {
+    if (daemonState !== "recording" || recordingBlocked) return
+    var links = Pipewire.linkGroups ? Pipewire.linkGroups.values : []
+    var result = Microphone.inspect(captureNodes, links)
+    if (result === "muted") blockRecording("muted")
+    else if (result === "ready") {
+      recordingVerified = true
+      checkStarted = Date.now()
+      state = "recording"
+    } else {
+      state = "checking"
+      if (Date.now() - checkStarted > 1500) blockRecording("unavailable")
+    }
+  }
+
+  // Track before reading mute/properties. Poll outside PipeWire's node-removal
+  // callbacks so disappearing headset streams can settle safely.
+  PwObjectTracker { objects: root.captureNodes }
+
+  Timer {
+    interval: 50
+    repeat: true
+    running: root.daemonState === "recording" && !root.recordingBlocked
+    onTriggered: root.checkMicrophone()
+  }
+
+  Process {
+    id: cancelProcess
+    command: ["voxtype", "record", "cancel"]
+  }
+
+  Timer {
+    id: warningTimer
+    interval: 3500
+    onTriggered: { if (root.warning) root.state = "idle" }
   }
 
   function updateAudio(raw) {
@@ -60,7 +141,7 @@ Item {
   }
 
   function barHeight(index) {
-    if (state === "success") return 5
+    if (state === "success" || state === "checking" || warning) return 5
 
     if (state === "recording" && audioSamples.length) {
       var sampleIndex = Math.min(audioSamples.length - 1,
@@ -82,6 +163,7 @@ Item {
       onRead: function(data) { root.update(data) }
     }
     onExited: function() {
+      root.daemonState = "idle"
       root.state = "idle"
       statusRetry.restart()
     }
@@ -187,7 +269,7 @@ Item {
           height: parent.height
           verticalAlignment: Text.AlignVCenter
           horizontalAlignment: Text.AlignHCenter
-          text: root.state === "success" ? "\uf00c" : "\uf130"
+          text: root.warning ? "\uf131" : root.state === "success" ? "\uf00c" : "\uf130"
           color: root.stateColor
           font.family: Style.font.family
           font.pixelSize: 20
