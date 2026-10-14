@@ -32,7 +32,7 @@ does not reserve screen space.
 
 - Omarchy with shell-plugin support.
 - Voxtype running as `voxtype.service`.
-- `omarchy-voxtype-status` available on `PATH`.
+- `setpriv` (util-linux) available on `PATH`.
 - `voxtype-audio-bridge` available on `PATH`.
 
 ## Install
@@ -68,7 +68,7 @@ To restore Voxtype's built-in display, set `[osd] enabled = true` and restart
 ## How It Works
 
 Aura is a keep-loaded Omarchy service plugin. It follows Voxtype's status stream
-through `omarchy-voxtype-status` and reads live microphone levels from
+through `voxtype status --follow` and reads live microphone levels from
 `voxtype-audio-bridge`. A valid transition from `transcribing` to an
 inactive state briefly shows the completion state. Unexpected or unavailable
 status data fails closed by hiding the overlay. If either process exits while
