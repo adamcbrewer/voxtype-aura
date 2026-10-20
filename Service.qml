@@ -102,7 +102,10 @@ Item {
   Process {
     id: statusProcess
 
-    command: ["omarchy-voxtype-status"]
+    // Run voxtype directly: Omarchy removed its omarchy-voxtype-status wrapper
+    // (basecamp/omarchy c248890). pdeathsig keeps the follower tied to the
+    // shell so a restart does not orphan it under systemd.
+    command: ["setpriv", "--pdeathsig", "TERM", "voxtype", "status", "--follow", "--extended", "--format", "json"]
     running: true
     stdout: SplitParser {
       onRead: function(data) { root.update(data) }
