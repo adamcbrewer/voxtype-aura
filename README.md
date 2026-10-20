@@ -6,6 +6,7 @@ dictation overlay for [Omarchy](https://omarchy.org/).
 Aura appears at the top-center of the focused monitor while Voxtype is active:
 
 - **LISTENING** with live microphone-level bars while recording.
+- A 2px countdown bar along the bottom shows recording time remaining.
 - **TRANSCRIBING** with a sweeping animation while processing speech.
 - **TRANSCRIBED** with a brief check mark after successful transcription.
 - Hidden when Voxtype is idle.
@@ -69,7 +70,11 @@ To restore Voxtype's built-in display, set `[osd] enabled = true` and restart
 
 Aura is a keep-loaded Omarchy service plugin. It follows Voxtype's status stream
 through `voxtype status --follow` and reads live microphone levels from
-`voxtype-audio-bridge`. A valid transition from `transcribing` to an
+`voxtype-audio-bridge`. At startup and each new recording, it reads
+`audio.max_duration_secs` using `voxtype config get` to set the countdown duration.
+The bar shrinks from full to empty in the recording color and hides when recording
+ends. If the duration cannot be read, the bar stays hidden.
+A valid transition from `transcribing` to an
 inactive state briefly shows the completion state. Unexpected or unavailable
 status data fails closed by hiding the overlay. If either process exits while
 needed, Aura retries it after one second.
@@ -84,7 +89,7 @@ See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for license attribution.
 ## Security
 
 Omarchy plugins run unsandboxed inside the long-lived `omarchy-shell` process.
-Review plugin code before enabling it. Aura runs two fixed local commands,
+Review plugin code before enabling it. Aura runs three fixed local commands,
 accepts no user input, performs no network requests, and reads no credentials.
 
 ## License

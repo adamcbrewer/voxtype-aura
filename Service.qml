@@ -12,7 +12,12 @@ Item {
   property string state: "idle"
   property int animationFrame: 0
   property var audioSamples: []
+  property int maxDurationSecs: 0
+  property real recordingStartedAt: 0
+  property real recordingElapsedSecs: 0
 
+  readonly property real recordingProgress: maxDurationSecs > 0
+    ? Math.max(0, 1 - recordingElapsedSecs / maxDurationSecs) : 0
   readonly property bool active: state === "recording" || state === "transcribing" || state === "success"
   readonly property color successColor: Qt.hsla(0.33, Math.max(0.35, Color.accent.hslSaturation), Color.accent.hslLightness, 1)
   readonly property color stateColor: state === "recording" ? Color.urgent
@@ -33,7 +38,12 @@ Item {
       var data = JSON.parse(String(raw || "{}"))
       var nextState = String(data.alt || data.class || "idle")
       if (nextState === "recording" || nextState === "transcribing") {
-        if (nextState === "recording" && state !== "recording") audioSamples = []
+        if (nextState === "recording" && state !== "recording") {
+          audioSamples = []
+          recordingStartedAt = Date.now()
+          recordingElapsedSecs = 0
+          durationProcess.running = true
+        }
         if (nextState === "transcribing" && state !== "transcribing") animationFrame = 0
         state = nextState
       } else if (state === "transcribing") {
@@ -71,6 +81,22 @@ Item {
     var distance = Math.abs(index - (animationFrame % 15))
     distance = Math.min(distance, 15 - distance)
     return 5 + Math.max(0, 16 - distance * 5)
+  }
+
+  Process {
+    id: durationProcess
+
+    command: ["voxtype", "config", "get", "audio.max_duration_secs"]
+    running: true
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var duration = Number(text.trim())
+        root.maxDurationSecs = isFinite(duration) && duration > 0 ? duration : 0
+      }
+    }
+    onExited: function(exitCode) {
+      if (exitCode !== 0) root.maxDurationSecs = 0
+    }
   }
 
   Process {
@@ -116,6 +142,13 @@ Item {
 
     interval: 1000
     onTriggered: statusProcess.running = true
+  }
+
+  Timer {
+    interval: 50
+    repeat: true
+    running: root.state === "recording"
+    onTriggered: root.recordingElapsedSecs = (Date.now() - root.recordingStartedAt) / 1000
   }
 
   Timer {
@@ -178,6 +211,24 @@ Item {
       color: Util.alpha(Color.background, 0.94)
       border.width: 1
       border.color: root.stateColor
+
+      Item {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: parent.radius
+        anchors.rightMargin: parent.radius
+        anchors.bottomMargin: 3
+        height: 2
+        visible: root.state === "recording" && root.maxDurationSecs > 0
+
+        Rectangle {
+          width: parent.width * root.recordingProgress
+          height: parent.height
+          radius: 1
+          color: root.stateColor
+        }
+      }
 
       Row {
         anchors.fill: parent
